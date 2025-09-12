@@ -1,0 +1,51 @@
+steps:
+  # Build Docker image for tests
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/postgrex-alloydb-test:$COMMIT_SHA', '.']
+  
+  # Push Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/postgrex-alloydb-test:$COMMIT_SHA']
+  
+  # Create Cloud Run job
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Create or update Cloud Run job
+        gcloud run jobs create postgrex-test-$SHORT_SHA \
+          --image gcr.io/$PROJECT_ID/postgrex-alloydb-test:$COMMIT_SHA \
+          --region us-central1 \
+          --vpc-connector postgrex-ci-connector \
+          --service-account postgrex-ci-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --set-env-vars "ALLOYDB_INSTANCE_URI=projects/$PROJECT_ID/locations/us-central1/clusters/postgrex-ci-cluster/instances/postgrex-ci-primary,ALLOYDB_USERNAME=postgrex-ci-sa@$PROJECT_ID.iam" \
+          --max-retries 0 \
+          --parallelism 1 \
+          --task-timeout 10m \
+          || \
+        gcloud run jobs update postgrex-test-$SHORT_SHA \
+          --image gcr.io/$PROJECT_ID/postgrex-alloydb-test:$COMMIT_SHA \
+          --region us-central1
+        
+        # Execute the job
+        gcloud run jobs execute postgrex-test-$SHORT_SHA --region us-central1 --wait
+        
+        # Get execution status
+        EXEC_NAME=$(gcloud run jobs executions list --job postgrex-test-$SHORT_SHA --region us-central1 --limit 1 --format="value(name)")
+        STATUS=$(gcloud run jobs executions describe $EXEC_NAME --region us-central1 --format="value(status.conditions[0].status)")
+        
+        # Clean up job
+        gcloud run jobs delete postgrex-test-$SHORT_SHA --region us-central1 --quiet
+        
+        if [ "$STATUS" != "True" ]; then
+          echo "❌ Tests failed!"
+          exit 1
+        fi
+        
+        echo "✅ All tests passed!"
+
+timeout: 1200s
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -160,7 +160,7 @@ defmodule PostgrexAlloyDB do
   ## Options
   
   - `:ip_type` - `:private` (default) or `:public`
-  - `:http_client` - HTTP client to use (default: HTTPoison)
+  - `:http_client` - HTTP client to use (internal Finch client)
   
   ## Examples
   
@@ -169,7 +169,6 @@ defmodule PostgrexAlloyDB do
   """
   @spec get_instance_ip_address(String.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def get_instance_ip_address(instance_uri, token, opts \\ []) do
-    http_client = Keyword.get(opts, :http_client, HTTPoison)
     ip_type = Keyword.get(opts, :ip_type, :private)
     
     url = "https://alloydb.googleapis.com/v1/#{instance_uri}"
@@ -178,7 +177,7 @@ defmodule PostgrexAlloyDB do
       {"Content-Type", "application/json"}
     ]
     
-    case http_client.get(url, headers) do
+    case http_get(url, headers) do
       {:ok, %{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, instance_data} ->
@@ -354,7 +353,7 @@ defmodule PostgrexAlloyDB do
     * `:project_id` - GCP project ID (required)
     * `:location` - AlloyDB location (required) 
     * `:cluster` - AlloyDB cluster name (required)
-    * `:http_client` - HTTP client module (default: HTTPoison)
+    * `:http_client` - HTTP client module (internal Finch client)
 
   ## Examples
 
@@ -372,7 +371,6 @@ defmodule PostgrexAlloyDB do
     project_id = Keyword.fetch!(opts, :project_id)
     location = Keyword.fetch!(opts, :location)
     cluster = Keyword.fetch!(opts, :cluster)
-    http_client = Keyword.get(opts, :http_client, HTTPoison)
     
     url = "https://alloydb.googleapis.com/v1beta/projects/#{project_id}/locations/#{location}/clusters/#{cluster}:generateClientCertificate"
     
@@ -383,7 +381,7 @@ defmodule PostgrexAlloyDB do
     
     body = Jason.encode!(%{"publicKey" => String.trim(public_pem)})
     
-    case http_client.post(url, body, headers) do
+    case http_post(url, body, headers) do
       {:ok, %{status_code: 200, body: response_body}} ->
         response = Jason.decode!(response_body)
         cert_chain = Enum.map(response["pemCertificateChain"], &String.trim/1)
@@ -599,7 +597,7 @@ defmodule PostgrexAlloyDB do
       location: location,
       cluster: cluster,
       hostname: resolved_opts[:hostname],
-      http_client: Keyword.get(resolved_opts, :http_client, HTTPoison)
+      http_client: :finch
     ]
     
     case generate_ssl_config(token, ssl_opts) do
@@ -944,6 +942,52 @@ defmodule PostgrexAlloyDB do
         end
       value -> 
         value
+    end
+  end
+
+  # HTTP client wrappers for Finch
+  defp http_get(url, headers) do
+    finch_request(:get, url, headers, nil)
+  end
+  
+  defp http_post(url, body, headers) do
+    finch_request(:post, url, headers, body)
+  end
+  
+  defp finch_request(method, url, headers, body) do
+    finch_name = PostgrexAlloyDB.Finch
+    
+    # Start Finch if not already started
+    case Process.whereis(finch_name) do
+      nil -> 
+        {:ok, _} = Finch.start_link(name: finch_name)
+      _ -> 
+        :ok
+    end
+    
+    request = Finch.build(method, url, headers, body)
+    
+    # Make request with retry on exit errors
+    try do
+      case Finch.request(request, finch_name) do
+        {:ok, %Finch.Response{status: status, body: response_body}} ->
+          {:ok, %{status_code: status, body: response_body}}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    catch
+      :exit, {:noproc, _} ->
+        # Finch process died, restart and retry
+        {:ok, _} = Finch.start_link(name: finch_name)
+        request = Finch.build(method, url, headers, body)
+        case Finch.request(request, finch_name) do
+          {:ok, %Finch.Response{status: status, body: response_body}} ->
+            {:ok, %{status_code: status, body: response_body}}
+          {:error, reason} ->
+            {:error, reason}
+        end
+      :exit, reason ->
+        {:error, {:exit, reason}}
     end
   end
 

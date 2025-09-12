@@ -29,7 +29,23 @@ defmodule PostgrexAlloyDB.IntegrationTest do
       # Start Goth with real credentials from metadata service
       # In Cloud Run/GCE, metadata service authentication is automatically available
       {:ok, goth_pid} = Goth.start_link(name: PostgrexAlloyDBTest, source: {:metadata, []})
-      on_exit(fn -> GenServer.stop(goth_pid) end)
+      
+      # Start Finch for HTTP requests if not already started
+      finch_pid = case Process.whereis(PostgrexAlloyDB.Finch) do
+        nil -> 
+          {:ok, pid} = Finch.start_link(name: PostgrexAlloyDB.Finch)
+          pid
+        pid -> 
+          pid
+      end
+      
+      on_exit(fn -> 
+        GenServer.stop(goth_pid)
+        # Only stop Finch if we started it
+        if finch_pid && Process.alive?(finch_pid) do
+          GenServer.stop(finch_pid)
+        end
+      end)
       
       %{
         instance_uri: System.get_env("ALLOYDB_INSTANCE_URI"),

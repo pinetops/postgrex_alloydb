@@ -1,0 +1,53 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      checks: write
+      statuses: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        project_id: postgrex-alloydb-ci
+        workload_identity_provider: projects/882586158293/locations/global/workloadIdentityPools/github/providers/github
+        service_account: postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Submit build to Cloud Build
+      run: |
+        gcloud builds submit \
+          --config=cloudbuild.yaml \
+          --substitutions=COMMIT_SHA=${{ github.sha }},SHORT_SHA=${{ github.sha:0:7 }} \
+          --project=postgrex-alloydb-ci
+    
+    - name: Report status
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const status = '${{ job.status }}' === 'success' ? 'success' : 'failure';
+          const description = status === 'success' ? 'All tests passed' : 'Tests failed';
+          
+          await github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: context.sha,
+            state: status,
+            description: description,
+            context: 'AlloyDB Integration Tests'
+          });
