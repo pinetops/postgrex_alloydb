@@ -116,30 +116,49 @@ defmodule PostgrexAlloyDB.IntegrationTest do
   
   describe "AlloyDB Authentication Integration" do
     test "debug service account identity" do
-      # Debug what service account we're actually using
-      {:ok, token} = PostgrexAlloyDB.get_token(PostgrexAlloyDBTest)
-      
-      # Try to decode the token to see the identity
-      try do
-        [_header, payload, _signature] = String.split(token, ".")
-        {:ok, decoded} = Base.url_decode64(payload, padding: false)
-        claims = Jason.decode!(decoded)
-        IO.puts("🔍 Token email claim: #{claims["email"]}")
-        IO.puts("🔍 Token sub claim: #{claims["sub"]}")
-      rescue
-        _ -> IO.puts("🔍 Could not decode token (may be opaque)")
-      end
-      
       # Get service account from metadata service
       url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
       request = Finch.build(:get, url, [{"Metadata-Flavor", "Google"}])
       
-      case Finch.request(request, PostgrexAlloyDB.Finch) do
+      sa_email = case Finch.request(request, PostgrexAlloyDB.Finch) do
         {:ok, response} ->
-          IO.puts("🔍 Metadata service account: #{response.body}")
-          IO.puts("⚠️  AlloyDB user should be created as: #{response.body}")
+          email = String.trim(response.body)
+          IO.puts("🔍 Service account from metadata: #{email}")
+          
+          # According to AlloyDB docs, for service accounts, use without .gserviceaccount.com
+          username = String.replace(email, ".gserviceaccount.com", ".iam")
+          IO.puts("🔍 AlloyDB username should be: #{username}")
+          IO.puts("🔍 Environment variable says: #{System.get_env("ALLOYDB_USERNAME")}")
+          
+          username
         {:error, reason} ->
           IO.puts("🔍 Could not get metadata: #{inspect(reason)}")
+          System.get_env("ALLOYDB_USERNAME")
+      end
+      
+      # Test with the correct username
+      if sa_email do
+        {:ok, token} = PostgrexAlloyDB.get_token(PostgrexAlloyDBTest)
+        IO.puts("🔍 Testing connection with username: #{sa_email}")
+        
+        opts = [
+          hostname: "10.109.0.14",
+          port: 5432,
+          username: sa_email,
+          password: token,
+          database: "postgres",
+          ssl: true,
+          timeout: 10_000
+        ]
+        
+        case Postgrex.start_link(opts) do
+          {:ok, conn} ->
+            IO.puts("✅ DIRECT CONNECTION SUCCESSFUL!")
+            {:ok, result} = Postgrex.query(conn, "SELECT current_user", [])
+            IO.puts("✅ Current user: #{inspect(result.rows)}")
+          {:error, error} ->
+            IO.puts("❌ Direct connection failed: #{inspect(error)}")
+        end
       end
       
       assert true
