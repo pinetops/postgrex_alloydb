@@ -46,7 +46,7 @@ steps:
           --region us-central1 \
           --vpc-connector postgrex-ci-connector \
           --service-account postgrex-ci-sa@$PROJECT_ID.iam.gserviceaccount.com \
-          --set-env-vars "ALLOYDB_INSTANCE_URI=projects/$PROJECT_ID/locations/us-central1/clusters/postgrex-ci-cluster/instances/postgrex-ci-primary,ALLOYDB_USERNAME=postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com" \
+          --set-env-vars "ALLOYDB_INSTANCE_URI=projects/$PROJECT_ID/locations/us-central1/clusters/postgrex-ci-cluster/instances/postgrex-ci-primary,ALLOYDB_USERNAME=postgrex-ci-sa@postgrex-alloydb-ci.iam" \
           --max-retries 0 \
           --parallelism 1 \
           --task-timeout 10m \
