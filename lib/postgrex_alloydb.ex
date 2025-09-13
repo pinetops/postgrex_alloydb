@@ -677,11 +677,14 @@ defmodule PostgrexAlloyDB do
   """
   @spec config_resolver(keyword()) :: keyword()
   def config_resolver(opts) do
+    Logger.info("config_resolver called with opts: #{inspect(Keyword.keys(opts))}")
+    
     # Extract Goth server first - we need it for resolving instance_uri
     goth_server = Keyword.fetch!(opts, :goth_server)
     
     # Resolve instance_uri if provided (now that we have goth_server available)
     resolved_opts = resolve_instance_uri(opts)
+    Logger.info("After resolve_instance_uri, hostname: #{inspect(resolved_opts[:hostname])}")
     
     project_id = get_required_opt_with_goth_fallback(resolved_opts, :project_id, "ALLOYDB_PROJECT_ID", goth_server)
     location = get_required_opt(resolved_opts, :location, "ALLOYDB_LOCATION")
