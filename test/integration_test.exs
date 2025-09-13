@@ -127,9 +127,16 @@ defmodule PostgrexAlloyDB.IntegrationTest do
           
           # According to AlloyDB docs, for service accounts, use without .gserviceaccount.com
           # Format: SERVICE_ACCOUNT@PROJECT_ID.iam
-          # From: postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com
-          # To: postgrex-ci-sa@postgrex-alloydb-ci.iam
-          username = String.replace(email, ".iam.gserviceaccount.com", ".iam")
+          # The service account email is: postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com
+          # But that's confusing because the project ID is just "postgrex-alloydb-ci"
+          # So we need: postgrex-ci-sa@postgrex-alloydb-ci.iam
+          username = if String.contains?(email, ".iam.gserviceaccount.com") do
+            # Project ID already has .iam in the domain
+            String.replace(email, ".gserviceaccount.com", "")
+          else
+            # Normal case: replace .gserviceaccount.com with .iam
+            String.replace(email, ".gserviceaccount.com", ".iam")
+          end
           IO.puts("🔍 AlloyDB username should be: #{username}")
           IO.puts("🔍 Environment variable says: #{System.get_env("ALLOYDB_USERNAME")}")
           
