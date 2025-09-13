@@ -29,7 +29,7 @@ defmodule PostgrexAlloydb.MixProject do
   defp deps do
     [
       {:goth, "~> 1.4"},
-      {:postgrex, "~> 0.17 or ~> 0.18 or ~> 0.19", optional: true},
+      {:postgrex, path: "../postgrex", optional: true},
       {:jason, "~> 1.2"},
       {:finch, "~> 0.13"},
       {:ex_doc, "~> 0.30", only: :dev, runtime: false}

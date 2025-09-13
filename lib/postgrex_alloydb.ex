@@ -677,20 +677,25 @@ defmodule PostgrexAlloyDB do
   """
   @spec config_resolver(keyword()) :: keyword()
   def config_resolver(opts) do
-    Logger.info("config_resolver called with opts: #{inspect(Keyword.keys(opts))}")
+    IO.puts("DEBUG: config_resolver called!")
+    IO.puts("DEBUG: Options keys: #{inspect(Keyword.keys(opts))}")
+    IO.puts("DEBUG: goth_server present: #{Keyword.has_key?(opts, :goth_server)}")
+    IO.puts("DEBUG: instance_uri present: #{Keyword.has_key?(opts, :instance_uri)}")
     
     # Extract Goth server - required for this resolver
     goth_server = case Keyword.fetch(opts, :goth_server) do
       {:ok, server} -> 
+        IO.puts("DEBUG: Found goth_server: #{inspect(server)}")
         server
       :error ->
-        Logger.error("config_resolver requires :goth_server in options but got: #{inspect(Keyword.keys(opts))}")
+        IO.puts("ERROR: config_resolver requires :goth_server in options!")
+        IO.puts("ERROR: Got options: #{inspect(opts)}")
         raise ArgumentError, "config_resolver requires :goth_server option"
     end
     
     # Resolve instance_uri if provided (now that we have goth_server available)
     resolved_opts = resolve_instance_uri(opts)
-    Logger.info("After resolve_instance_uri, hostname: #{inspect(resolved_opts[:hostname])}")
+    IO.puts("DEBUG: After resolve_instance_uri, hostname: #{inspect(resolved_opts[:hostname])}")
     
     project_id = get_required_opt_with_goth_fallback(resolved_opts, :project_id, "ALLOYDB_PROJECT_ID", goth_server)
     location = get_required_opt(resolved_opts, :location, "ALLOYDB_LOCATION")
