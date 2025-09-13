@@ -215,24 +215,24 @@ defmodule PostgrexAlloyDB.IntegrationTest do
         goth_server: PostgrexAlloyDBTest,
         instance_uri: uri,
         database: "postgres", 
-        username: username
+        username: username,
+        # Pass config_resolver as a function reference
+        config_resolver: &PostgrexAlloyDB.config_resolver/1
       ]
       
-      config = PostgrexAlloyDB.config_resolver(opts)
+      # Test that config_resolver works when passed to Postgrex
+      {:ok, conn} = Postgrex.start_link(opts)
       
-      # Should have resolved to real IP
-      assert config[:hostname] != "127.0.0.1"
-      assert config[:hostname] =~ ~r/^10\./
-      assert config[:username] == username
-      assert String.starts_with?(config[:password], "ya29.")  # OAuth token
-      assert is_list(config[:ssl])
-      
-      # Test that config actually works for connection
-      {:ok, conn} = Postgrex.start_link(config)
+      # Verify connection works
       result = Postgrex.query!(conn, "SELECT 'config_resolver test success' as message", [])
       assert [["config_resolver test success"]] = result.rows
       
-      IO.puts("✅ config_resolver successfully connected to AlloyDB")
+      # Verify we're connected as IAM user
+      result = Postgrex.query!(conn, "SELECT current_user", [])
+      [[current_user]] = result.rows
+      assert current_user == username
+      
+      IO.puts("✅ config_resolver successfully connected to AlloyDB with dynamic credentials")
       
       GenServer.stop(conn)
     end
