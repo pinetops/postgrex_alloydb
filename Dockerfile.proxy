@@ -1,0 +1,18 @@
+FROM elixir:1.18-otp-27
+
+# Install AlloyDB Auth Proxy
+RUN apt-get update && apt-get install -y wget && \
+    wget https://storage.googleapis.com/alloydb-auth-proxy/v1.12.2/alloydb-auth-proxy.linux.amd64 -O /usr/local/bin/alloydb-auth-proxy && \
+    chmod +x /usr/local/bin/alloydb-auth-proxy
+
+WORKDIR /app
+
+# Copy test script
+COPY test_with_proxy.exs .
+
+# Start proxy and run test
+CMD /usr/local/bin/alloydb-auth-proxy \
+    "projects/postgrex-alloydb-ci/locations/us-central1/clusters/postgrex-ci-cluster/instances/postgrex-ci-primary" \
+    --port=5432 & \
+    sleep 5 && \
+    elixir test_with_proxy.exs
