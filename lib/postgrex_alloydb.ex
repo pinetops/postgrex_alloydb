@@ -679,8 +679,14 @@ defmodule PostgrexAlloyDB do
   def config_resolver(opts) do
     Logger.info("config_resolver called with opts: #{inspect(Keyword.keys(opts))}")
     
-    # Extract Goth server first - we need it for resolving instance_uri
-    goth_server = Keyword.fetch!(opts, :goth_server)
+    # Extract Goth server - required for this resolver
+    goth_server = case Keyword.fetch(opts, :goth_server) do
+      {:ok, server} -> 
+        server
+      :error ->
+        Logger.error("config_resolver requires :goth_server in options but got: #{inspect(Keyword.keys(opts))}")
+        raise ArgumentError, "config_resolver requires :goth_server option"
+    end
     
     # Resolve instance_uri if provided (now that we have goth_server available)
     resolved_opts = resolve_instance_uri(opts)
