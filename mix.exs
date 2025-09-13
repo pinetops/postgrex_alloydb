@@ -29,7 +29,7 @@ defmodule PostgrexAlloydb.MixProject do
   defp deps do
     [
       {:goth, "~> 1.4"},
-      {:postgrex, github: "pinetops/postgrex", branch: "master", optional: true},
+      {:postgrex, github: "pinetops/postgrex", branch: "iam-support", optional: true},
       {:jason, "~> 1.2"},
       {:finch, "~> 0.13"},
       {:ex_doc, "~> 0.30", only: :dev, runtime: false}
