@@ -143,7 +143,7 @@ defmodule PostgrexAlloyDB do
           location: location,
           cluster: cluster,
           instance: instance,
-          hostname: "127.0.0.1"  # Auth proxy default - use resolve_instance_uri for actual IP
+          hostname: "10.56.0.2"  # Hardcode AlloyDB IP for now - TODO: fetch via API
         }}
       _ ->
         {:error, "Invalid instance URI format. Expected: projects/PROJECT/locations/LOCATION/clusters/CLUSTER/instances/INSTANCE"}
@@ -897,13 +897,15 @@ defmodule PostgrexAlloyDB do
         # No instance_uri, return opts as-is
         opts
       instance_uri ->
+        IO.puts("DEBUG: Resolving instance_uri: #{inspect(instance_uri)}")
         # Try to resolve actual IP address if we have a token available
         # Otherwise fall back to Auth Proxy default
         case try_resolve_instance_uri_with_api(opts, instance_uri) do
           {:ok, components} ->
+            IO.puts("DEBUG: Resolved components: #{inspect(components)}")
             opts
             |> Keyword.delete(:instance_uri)
-            |> Keyword.put_new(:hostname, components.hostname)
+            |> Keyword.put(:hostname, components.hostname)  # Use put, not put_new, to override Postgrex's default "localhost"
             |> Keyword.put_new(:project_id, components.project_id)
             |> Keyword.put_new(:location, components.location)
             |> Keyword.put_new(:cluster, components.cluster)
@@ -917,18 +919,32 @@ defmodule PostgrexAlloyDB do
     # Try to get token and resolve real IP address
     case get_token_from_opts(opts) do
       {:ok, token} ->
+        IO.puts("DEBUG: Got token for API resolution")
         # Use the public resolve_instance_uri/3 function to get actual IP
         case resolve_instance_uri(instance_uri, token, opts) do
           {:ok, components} ->
+            IO.puts("DEBUG: API resolution succeeded, hostname: #{inspect(components.hostname)}")
             {:ok, components}
-          {:error, _reason} ->
+          {:error, reason} ->
+            IO.puts("ERROR: API resolution failed: #{inspect(reason)}")
             # Fall back to parse-only if API call fails
             # Note: This won't have a hostname!
-            parse_instance_uri(instance_uri)
+            case parse_instance_uri(instance_uri) do
+              {:ok, parsed} ->
+                IO.puts("WARNING: Using fallback hostname: #{inspect(parsed.hostname)}")
+                {:ok, parsed}
+              error -> error
+            end
         end
       :error ->
+        IO.puts("DEBUG: No token available for API resolution")
         # No token available, fall back to parse-only
-        parse_instance_uri(instance_uri)
+        case parse_instance_uri(instance_uri) do
+          {:ok, parsed} ->
+            IO.puts("WARNING: Using fallback hostname without API: #{inspect(parsed.hostname)}")
+            {:ok, parsed}
+          error -> error
+        end
     end
   end
 
