@@ -115,65 +115,6 @@ defmodule PostgrexAlloyDB.IntegrationTest do
   end
   
   describe "AlloyDB Authentication Integration" do
-    test "debug service account identity" do
-      # Get service account from metadata service
-      url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
-      request = Finch.build(:get, url, [{"Metadata-Flavor", "Google"}])
-      
-      sa_email = case Finch.request(request, PostgrexAlloyDB.Finch) do
-        {:ok, response} ->
-          email = String.trim(response.body)
-          IO.puts("🔍 Service account from metadata: #{email}")
-          
-          # According to AlloyDB docs, for service accounts, use without .gserviceaccount.com
-          # Format: SERVICE_ACCOUNT@PROJECT_ID.iam
-          # The service account email is: postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com
-          # But that's confusing because the project ID is just "postgrex-alloydb-ci"
-          # So we need: postgrex-ci-sa@postgrex-alloydb-ci.iam
-          username = if String.contains?(email, ".iam.gserviceaccount.com") do
-            # Project ID already has .iam in the domain
-            String.replace(email, ".gserviceaccount.com", "")
-          else
-            # Normal case: replace .gserviceaccount.com with .iam
-            String.replace(email, ".gserviceaccount.com", ".iam")
-          end
-          IO.puts("🔍 AlloyDB username should be: #{username}")
-          IO.puts("🔍 Environment variable says: #{System.get_env("ALLOYDB_USERNAME")}")
-          
-          username
-        {:error, reason} ->
-          IO.puts("🔍 Could not get metadata: #{inspect(reason)}")
-          System.get_env("ALLOYDB_USERNAME")
-      end
-      
-      # Test with the correct username
-      if sa_email do
-        {:ok, token} = PostgrexAlloyDB.get_token(PostgrexAlloyDBTest)
-        IO.puts("🔍 Testing connection with username: #{sa_email}")
-        
-        opts = [
-          hostname: "10.109.0.14",
-          port: 5432,
-          username: sa_email,
-          password: token,
-          database: "postgres",
-          ssl: true,
-          timeout: 10_000
-        ]
-        
-        case Postgrex.start_link(opts) do
-          {:ok, conn} ->
-            IO.puts("✅ DIRECT CONNECTION SUCCESSFUL!")
-            {:ok, result} = Postgrex.query(conn, "SELECT current_user", [])
-            IO.puts("✅ Current user: #{inspect(result.rows)}")
-          {:error, error} ->
-            IO.puts("❌ Direct connection failed: #{inspect(error)}")
-        end
-      end
-      
-      assert true
-    end
-    
     test "full IAM authentication flow with postgrex_config", %{instance_uri: uri, username: username} do
       config = PostgrexAlloyDB.postgrex_config([
         goth_name: PostgrexAlloyDBTest,
