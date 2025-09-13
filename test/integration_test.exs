@@ -126,7 +126,10 @@ defmodule PostgrexAlloyDB.IntegrationTest do
           IO.puts("🔍 Service account from metadata: #{email}")
           
           # According to AlloyDB docs, for service accounts, use without .gserviceaccount.com
-          username = String.replace(email, ".gserviceaccount.com", ".iam")
+          # Format: SERVICE_ACCOUNT@PROJECT_ID.iam
+          # From: postgrex-ci-sa@postgrex-alloydb-ci.iam.gserviceaccount.com
+          # To: postgrex-ci-sa@postgrex-alloydb-ci.iam
+          username = String.replace(email, ".iam.gserviceaccount.com", ".iam")
           IO.puts("🔍 AlloyDB username should be: #{username}")
           IO.puts("🔍 Environment variable says: #{System.get_env("ALLOYDB_USERNAME")}")
           

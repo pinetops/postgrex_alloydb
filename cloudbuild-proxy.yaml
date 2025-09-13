@@ -1,0 +1,38 @@
+steps:
+  # Build proxy test image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.proxy', '-t', 'gcr.io/$PROJECT_ID/test-proxy:$COMMIT_SHA', '.']
+  
+  # Push image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/test-proxy:$COMMIT_SHA']
+  
+  # Run proxy test
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run jobs create test-proxy-$SHORT_SHA \
+          --image gcr.io/$PROJECT_ID/test-proxy:$COMMIT_SHA \
+          --region us-central1 \
+          --vpc-connector postgrex-ci-connector \
+          --service-account postgrex-ci-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --max-retries 0 \
+          --parallelism 1 \
+          --task-timeout 5m
+        
+        gcloud run jobs execute test-proxy-$SHORT_SHA --region us-central1 --wait
+        
+        STATUS=$$(gcloud run jobs executions list --job test-proxy-$$SHORT_SHA --region us-central1 --limit 1 --format="value(status.conditions[0].status)")
+        
+        gcloud run jobs delete test-proxy-$SHORT_SHA --region us-central1 --quiet
+        
+        if [ "$$STATUS" != "True" ]; then
+          echo "❌ Proxy test failed!"
+          exit 1
+        fi
+        
+        echo "✅ Proxy test passed!"
+
+timeout: 600s
