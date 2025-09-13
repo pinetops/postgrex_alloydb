@@ -9,7 +9,7 @@ defmodule PostgrexAlloyDB.IntegrationTest do
   
   See INTEGRATION_TESTING.md for setup instructions.
   """
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   
   @moduletag :integration
   @moduletag timeout: 120_000  # 2 minutes per test
