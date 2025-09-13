@@ -13,18 +13,34 @@ defmodule PostgrexAlloyDB do
 
   ### Standalone Postgrex Connections
 
-      # AlloyDB instance URI (recommended)
+      # AlloyDB instance URI with auto-derived username (IAM mode)
+      config = PostgrexAlloyDB.postgrex_config(
+        goth_name: MyApp.Goth,
+        instance_uri: "projects/my-project/locations/us-central1/clusters/prod/instances/primary",
+        database: "postgres"
+        # Username auto-derived from service account metadata!
+      )
+      {:ok, conn} = Postgrex.start_link(config)
+      
+      # Or specify username explicitly
       config = PostgrexAlloyDB.postgrex_config(
         goth_name: MyApp.Goth,
         instance_uri: "projects/my-project/locations/us-central1/clusters/prod/instances/primary",
         database: "postgres",
         username: "myapp@myproject.iam"   # IAM service account
-        # All AlloyDB details auto-derived from instance_uri!
       )
       {:ok, conn} = Postgrex.start_link(config)
 
   ### Ecto Integration
 
+      # With auto-derived username (IAM mode)
+      config :my_app, MyApp.Repo,
+        instance_uri: "projects/my-project/locations/us-central1/clusters/prod/instances/primary",
+        database: "postgres",
+        goth_server: MyApp.Goth,
+        config_resolver: &PostgrexAlloyDB.config_resolver/1
+        
+      # Or with explicit username
       config :my_app, MyApp.Repo,
         instance_uri: "projects/my-project/locations/us-central1/clusters/prod/instances/primary",
         database: "postgres",
@@ -261,6 +277,62 @@ defmodule PostgrexAlloyDB do
   end
 
   @doc """
+  Derives the AlloyDB IAM username from the service account metadata.
+  
+  When running on GCP infrastructure (Cloud Run, GCE, etc.), this function
+  retrieves the service account email from the metadata service and converts
+  it to the correct AlloyDB IAM username format.
+  
+  ## Format Conversion
+  
+  - From: `SERVICE@PROJECT.iam.gserviceaccount.com`
+  - To: `SERVICE@PROJECT.iam`
+  
+  ## Examples
+  
+      {:ok, username} = PostgrexAlloyDB.derive_iam_username()
+      # => "my-service@my-project.iam"
+  
+  ## Options
+  
+  - `:finch_name` - Name of the Finch HTTP client (default: `PostgrexAlloyDB.Finch`)
+  - `:timeout` - Request timeout in milliseconds (default: 5000)
+  """
+  @spec derive_iam_username(keyword()) :: {:ok, String.t()} | {:error, term()}
+  def derive_iam_username(opts \\ []) do
+    finch_name = Keyword.get(opts, :finch_name, PostgrexAlloyDB.Finch)
+    timeout = Keyword.get(opts, :timeout, 5000)
+    
+    # Ensure Finch is started
+    unless Process.whereis(finch_name) do
+      {:ok, _} = Finch.start_link(name: finch_name)
+    end
+    
+    # Get service account email from metadata service
+    url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+    request = Finch.build(:get, url, [{"Metadata-Flavor", "Google"}])
+    
+    case Finch.request(request, finch_name, timeout: timeout) do
+      {:ok, %{status: 200, body: body}} ->
+        email = String.trim(body)
+        # Convert to AlloyDB IAM format
+        # Handle special case where project ID already contains .iam
+        username = if String.contains?(email, ".iam.gserviceaccount.com") do
+          String.replace(email, ".gserviceaccount.com", "")
+        else
+          String.replace(email, ".gserviceaccount.com", ".iam")
+        end
+        {:ok, username}
+      
+      {:ok, %{status: status}} ->
+        {:error, "Metadata service returned status #{status}"}
+      
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
   Generates RSA keypair using native Elixir/Erlang crypto.
 
   This implementation works with OTP 27+ and eliminates OpenSSL dependencies.
@@ -463,7 +535,7 @@ defmodule PostgrexAlloyDB do
     * `:goth_name` - Name of Goth server (required for both auth modes)
     * `:hostname` - AlloyDB hostname/IP (required) 
     * `:database` - Database name (required)
-    * `:username` - Database username (required)
+    * `:username` - Database username (auto-derived for IAM mode if not provided)
     * `:password` - Database password (required for `:native` auth only)
     * `:project_id` - GCP project ID (required)
     * `:location` - AlloyDB location (required)
@@ -471,11 +543,28 @@ defmodule PostgrexAlloyDB do
     * `:auth_mode` - Authentication mode: `:iam` or `:native` (default: `:iam`)
     * `:port` - Port (default: 5432)
     * `:timeout` - Connection timeout (default: 15000)
+    
+  ## Username Auto-derivation
+  
+  When using IAM authentication (`:auth_mode => :iam`) and username is not provided,
+  it will be automatically derived from the service account metadata. This only works
+  when running on GCP infrastructure (Cloud Run, GCE, GKE, etc.).
 
   ## Examples
 
-      # IAM authentication (default)
-      config = Goth.AlloyDB.postgrex_config(
+      # IAM authentication with auto-derived username
+      config = PostgrexAlloyDB.postgrex_config(
+        goth_name: MyApp.Goth,
+        hostname: "10.0.0.1",
+        database: "postgres",
+        # username auto-derived from service account
+        project_id: "my-project",
+        location: "us-central1",
+        cluster: "my-cluster"
+      )
+      
+      # IAM authentication with explicit username
+      config = PostgrexAlloyDB.postgrex_config(
         goth_name: MyApp.Goth,
         hostname: "10.0.0.1",
         database: "postgres", 
@@ -486,7 +575,7 @@ defmodule PostgrexAlloyDB do
       )
 
       # Native database authentication
-      config = Goth.AlloyDB.postgrex_config(
+      config = PostgrexAlloyDB.postgrex_config(
         goth_name: MyApp.Goth,
         hostname: "10.0.0.1",
         database: "postgres", 
@@ -507,10 +596,25 @@ defmodule PostgrexAlloyDB do
     goth_name = Keyword.fetch!(resolved_opts, :goth_name)
     hostname = Keyword.fetch!(resolved_opts, :hostname)
     database = Keyword.fetch!(resolved_opts, :database)
-    username = Keyword.fetch!(resolved_opts, :username)
     port = Keyword.get(resolved_opts, :port, 5432)
     timeout = Keyword.get(resolved_opts, :timeout, 15000)
     auth_mode = Keyword.get(resolved_opts, :auth_mode, :iam)
+    
+    # Auto-derive username for IAM mode if not provided
+    username = case {Keyword.get(resolved_opts, :username), auth_mode} do
+      {nil, :iam} ->
+        case derive_iam_username() do
+          {:ok, derived_username} ->
+            Logger.info("Auto-derived IAM username: #{derived_username}")
+            derived_username
+          {:error, reason} ->
+            raise ArgumentError, "Username not provided and auto-derivation failed: #{inspect(reason)}"
+        end
+      {nil, :native} ->
+        raise ArgumentError, "Username is required for native auth mode"
+      {username, _} ->
+        username
+    end
     
     # Validate auth_mode
     unless auth_mode in [:iam, :native] do
@@ -584,6 +688,22 @@ defmodule PostgrexAlloyDB do
     cluster = get_required_opt(resolved_opts, :cluster, "ALLOYDB_CLUSTER")
     auth_mode = Keyword.get(resolved_opts, :auth_mode, :iam)
     
+    # Auto-derive username for IAM mode if not provided
+    username = case {Keyword.get(resolved_opts, :username), auth_mode} do
+      {nil, :iam} ->
+        case derive_iam_username() do
+          {:ok, derived_username} ->
+            Logger.info("Auto-derived IAM username for config_resolver: #{derived_username}")
+            derived_username
+          {:error, reason} ->
+            raise ArgumentError, "Username not provided and auto-derivation failed: #{inspect(reason)}"
+        end
+      {nil, :native} ->
+        raise ArgumentError, "Username is required for native auth mode"
+      {username, _} ->
+        username
+    end
+    
     # Validate auth_mode
     unless auth_mode in [:iam, :native] do
       raise ArgumentError, "Invalid auth_mode: #{inspect(auth_mode)}. Must be one of: :iam, :native"
@@ -602,17 +722,14 @@ defmodule PostgrexAlloyDB do
     
     case generate_ssl_config(token, ssl_opts) do
       {:ok, ssl_config} ->
-        # Configure auth based on mode
-        {username, password} = case auth_mode do
+        # Configure auth based on mode (username already derived above)
+        password = case auth_mode do
           :iam ->
             # IAM mode: OAuth token as password
-            username = get_required_opt(resolved_opts, :username, "ALLOYDB_IAM_USER")
-            {username, token}
+            token
           :native ->
             # Native mode: provided credentials
-            username = get_required_opt(resolved_opts, :username, "ALLOYDB_DB_USER")
-            password = get_required_opt(resolved_opts, :password, "ALLOYDB_DB_PASSWORD")
-            {username, password}
+            get_required_opt(resolved_opts, :password, "ALLOYDB_DB_PASSWORD")
         end
         
         opts
