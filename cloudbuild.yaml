@@ -1,4 +1,31 @@
 steps:
+  # Build test-direct image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.test-direct', '-t', 'gcr.io/$PROJECT_ID/test-direct:$COMMIT_SHA', '.']
+  
+  # Push test-direct image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/test-direct:$COMMIT_SHA']
+  
+  # Run direct test first
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run jobs create test-direct-$SHORT_SHA \
+          --image gcr.io/$PROJECT_ID/test-direct:$COMMIT_SHA \
+          --region us-central1 \
+          --vpc-connector postgrex-ci-connector \
+          --service-account postgrex-ci-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --max-retries 0 \
+          --parallelism 1 \
+          --task-timeout 5m
+        
+        gcloud run jobs execute test-direct-$SHORT_SHA --region us-central1 --wait
+        
+        gcloud run jobs delete test-direct-$SHORT_SHA --region us-central1 --quiet
+  
   # Build Docker image for tests
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/postgrex-alloydb-test:$COMMIT_SHA', '.']

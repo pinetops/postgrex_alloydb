@@ -1,0 +1,9 @@
+FROM elixir:1.18-otp-27
+
+WORKDIR /app
+
+# Copy test script
+COPY test_direct.exs .
+
+# Run test
+CMD ["elixir", "test_direct.exs"]
