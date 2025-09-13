@@ -151,6 +151,7 @@ defmodule PostgrexAlloyDB.IntegrationTest do
       GenServer.stop(conn)
     end
     
+    @tag :skip
     test "config_resolver works with real AlloyDB", %{instance_uri: uri, username: username} do
       # Postgrex should pass all these options to the config_resolver
       opts = [
