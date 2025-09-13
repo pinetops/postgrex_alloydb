@@ -1,0 +1,4 @@
+FROM alpine:latest
+COPY test_minimal.sh /test.sh
+RUN chmod +x /test.sh
+CMD ["/test.sh"]

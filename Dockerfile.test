@@ -1,0 +1,11 @@
+FROM postgres:16
+
+# Install curl for getting OAuth token
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copy test script
+COPY test_direct_connection.sh /test.sh
+RUN chmod +x /test.sh
+
+# Run the test
+CMD ["/test.sh"]

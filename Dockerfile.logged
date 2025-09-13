@@ -1,0 +1,8 @@
+FROM postgres:16
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+COPY test_logged.sh /test.sh
+RUN chmod +x /test.sh
+
+CMD ["/test.sh"]
