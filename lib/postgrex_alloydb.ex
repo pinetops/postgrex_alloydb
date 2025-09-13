@@ -143,7 +143,7 @@ defmodule PostgrexAlloyDB do
           location: location,
           cluster: cluster,
           instance: instance,
-          hostname: "10.56.0.2"  # Hardcode AlloyDB IP for now - TODO: fetch via API
+          hostname: nil  # Will be resolved via API when token is available
         }}
       _ ->
         {:error, "Invalid instance URI format. Expected: projects/PROJECT/locations/LOCATION/clusters/CLUSTER/instances/INSTANCE"}

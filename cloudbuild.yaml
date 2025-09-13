@@ -59,7 +59,7 @@ steps:
         gcloud run jobs execute postgrex-test-$SHORT_SHA --region us-central1 --wait
         
         # Get execution status
-        EXEC_NAME=$$(gcloud run jobs executions list --job postgrex-test-$$SHORT_SHA --region us-central1 --limit 1 --format="value(name)")
+        EXEC_NAME=$$(gcloud run jobs executions list --job postgrex-test-$SHORT_SHA --region us-central1 --limit 1 --format="value(name)")
         STATUS=$$(gcloud run jobs executions describe $$EXEC_NAME --region us-central1 --format="value(status.conditions[0].status)")
         
         # Clean up job
