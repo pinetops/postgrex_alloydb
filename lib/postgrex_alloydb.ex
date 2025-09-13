@@ -677,25 +677,16 @@ defmodule PostgrexAlloyDB do
   """
   @spec config_resolver(keyword()) :: keyword()
   def config_resolver(opts) do
-    IO.puts("DEBUG: config_resolver called!")
-    IO.puts("DEBUG: Options keys: #{inspect(Keyword.keys(opts))}")
-    IO.puts("DEBUG: goth_server present: #{Keyword.has_key?(opts, :goth_server)}")
-    IO.puts("DEBUG: instance_uri present: #{Keyword.has_key?(opts, :instance_uri)}")
     
     # Extract Goth server - required for this resolver
     goth_server = case Keyword.fetch(opts, :goth_server) do
-      {:ok, server} -> 
-        IO.puts("DEBUG: Found goth_server: #{inspect(server)}")
-        server
+      {:ok, server} -> server
       :error ->
-        IO.puts("ERROR: config_resolver requires :goth_server in options!")
-        IO.puts("ERROR: Got options: #{inspect(opts)}")
         raise ArgumentError, "config_resolver requires :goth_server option"
     end
     
     # Resolve instance_uri if provided (now that we have goth_server available)
     resolved_opts = resolve_instance_uri(opts)
-    IO.puts("DEBUG: After resolve_instance_uri, hostname: #{inspect(resolved_opts[:hostname])}")
     
     project_id = get_required_opt_with_goth_fallback(resolved_opts, :project_id, "ALLOYDB_PROJECT_ID", goth_server)
     location = get_required_opt(resolved_opts, :location, "ALLOYDB_LOCATION")
@@ -897,12 +888,10 @@ defmodule PostgrexAlloyDB do
         # No instance_uri, return opts as-is
         opts
       instance_uri ->
-        IO.puts("DEBUG: Resolving instance_uri: #{inspect(instance_uri)}")
         # Try to resolve actual IP address if we have a token available
         # Otherwise fall back to Auth Proxy default
         case try_resolve_instance_uri_with_api(opts, instance_uri) do
           {:ok, components} ->
-            IO.puts("DEBUG: Resolved components: #{inspect(components)}")
             opts
             |> Keyword.delete(:instance_uri)
             |> Keyword.put(:hostname, components.hostname)  # Use put, not put_new, to override Postgrex's default "localhost"
@@ -919,29 +908,23 @@ defmodule PostgrexAlloyDB do
     # Try to get token and resolve real IP address
     case get_token_from_opts(opts) do
       {:ok, token} ->
-        IO.puts("DEBUG: Got token for API resolution")
         # Use the public resolve_instance_uri/3 function to get actual IP
         case resolve_instance_uri(instance_uri, token, opts) do
           {:ok, components} ->
-            IO.puts("DEBUG: API resolution succeeded, hostname: #{inspect(components.hostname)}")
             {:ok, components}
           {:error, reason} ->
-            IO.puts("ERROR: API resolution failed: #{inspect(reason)}")
             # Fall back to parse-only if API call fails
             # Note: This won't have a hostname!
             case parse_instance_uri(instance_uri) do
               {:ok, parsed} ->
-                IO.puts("WARNING: Using fallback hostname: #{inspect(parsed.hostname)}")
                 {:ok, parsed}
               error -> error
             end
         end
       :error ->
-        IO.puts("DEBUG: No token available for API resolution")
         # No token available, fall back to parse-only
         case parse_instance_uri(instance_uri) do
           {:ok, parsed} ->
-            IO.puts("WARNING: Using fallback hostname without API: #{inspect(parsed.hostname)}")
             {:ok, parsed}
           error -> error
         end

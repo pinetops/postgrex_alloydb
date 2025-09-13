@@ -1,0 +1,8 @@
+name: postgrex-alloydb-main
+description: Run tests on push to main
+github:
+  name: postgrex_alloydb
+  owner: pinetops
+  push:
+    branch: main
+filename: cloudbuild.yaml
