@@ -1,0 +1,9 @@
+FROM elixir:1.18-otp-27
+
+WORKDIR /app
+
+# Copy debug script
+COPY debug_auth.exs .
+
+# Run debug script
+CMD ["elixir", "debug_auth.exs"]

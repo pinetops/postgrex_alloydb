@@ -115,6 +115,36 @@ defmodule PostgrexAlloyDB.IntegrationTest do
   end
   
   describe "AlloyDB Authentication Integration" do
+    test "debug service account identity" do
+      # Debug what service account we're actually using
+      {:ok, token} = PostgrexAlloyDB.get_token(PostgrexAlloyDBTest)
+      
+      # Try to decode the token to see the identity
+      try do
+        [_header, payload, _signature] = String.split(token, ".")
+        {:ok, decoded} = Base.url_decode64(payload, padding: false)
+        claims = Jason.decode!(decoded)
+        IO.puts("🔍 Token email claim: #{claims["email"]}")
+        IO.puts("🔍 Token sub claim: #{claims["sub"]}")
+      rescue
+        _ -> IO.puts("🔍 Could not decode token (may be opaque)")
+      end
+      
+      # Get service account from metadata service
+      url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+      request = Finch.build(:get, url, [{"Metadata-Flavor", "Google"}])
+      
+      case Finch.request(request, PostgrexAlloyDB.Finch) do
+        {:ok, response} ->
+          IO.puts("🔍 Metadata service account: #{response.body}")
+          IO.puts("⚠️  AlloyDB user should be created as: #{response.body}")
+        {:error, reason} ->
+          IO.puts("🔍 Could not get metadata: #{inspect(reason)}")
+      end
+      
+      assert true
+    end
+    
     test "full IAM authentication flow with postgrex_config", %{instance_uri: uri, username: username} do
       config = PostgrexAlloyDB.postgrex_config([
         goth_name: PostgrexAlloyDBTest,
