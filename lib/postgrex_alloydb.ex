@@ -677,11 +677,11 @@ defmodule PostgrexAlloyDB do
   """
   @spec config_resolver(keyword()) :: keyword()
   def config_resolver(opts) do
-    # Resolve instance_uri if provided
-    resolved_opts = resolve_instance_uri(opts)
+    # Extract Goth server first - we need it for resolving instance_uri
+    goth_server = Keyword.fetch!(opts, :goth_server)
     
-    # Extract Goth server from connection options (consistent with other Goth usage)
-    goth_server = Keyword.fetch!(resolved_opts, :goth_server)
+    # Resolve instance_uri if provided (now that we have goth_server available)
+    resolved_opts = resolve_instance_uri(opts)
     
     project_id = get_required_opt_with_goth_fallback(resolved_opts, :project_id, "ALLOYDB_PROJECT_ID", goth_server)
     location = get_required_opt(resolved_opts, :location, "ALLOYDB_LOCATION")
@@ -712,11 +712,19 @@ defmodule PostgrexAlloyDB do
     # Generate fresh OAuth token for certificate generation
     token = get_token!(goth_server)
     
+    # Ensure we have a hostname - required for SSL connection
+    hostname = case resolved_opts[:hostname] do
+      nil ->
+        raise ArgumentError, "Hostname could not be resolved from instance_uri. Either provide :hostname directly or ensure :goth_server/:goth_name is accessible for API resolution."
+      hostname ->
+        hostname
+    end
+    
     ssl_opts = [
       project_id: project_id,
       location: location,
       cluster: cluster,
-      hostname: resolved_opts[:hostname],
+      hostname: hostname,
       http_client: :finch
     ]
     
@@ -733,7 +741,7 @@ defmodule PostgrexAlloyDB do
         end
         
         opts
-        |> Keyword.put(:hostname, resolved_opts[:hostname])
+        |> Keyword.put(:hostname, hostname)
         |> Keyword.put(:username, username)
         |> Keyword.put(:password, password)
         |> Keyword.put(:ssl, ssl_config)
@@ -901,6 +909,7 @@ defmodule PostgrexAlloyDB do
             {:ok, components}
           {:error, _reason} ->
             # Fall back to parse-only if API call fails
+            # Note: This won't have a hostname!
             parse_instance_uri(instance_uri)
         end
       :error ->
