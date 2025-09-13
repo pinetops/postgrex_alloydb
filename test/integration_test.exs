@@ -152,24 +152,13 @@ defmodule PostgrexAlloyDB.IntegrationTest do
     end
     
     test "config_resolver works with real AlloyDB", %{instance_uri: uri, username: username} do
-      # Create a closure that captures the needed options
-      alloydb_opts = [
+      # Postgrex should pass all these options to the config_resolver
+      opts = [
         goth_server: PostgrexAlloyDBTest,
         instance_uri: uri,
         database: "postgres", 
-        username: username
-      ]
-      
-      # Create resolver that merges AlloyDB options with Postgrex options
-      resolver = fn postgrex_opts ->
-        merged_opts = Keyword.merge(alloydb_opts, postgrex_opts)
-        PostgrexAlloyDB.config_resolver(merged_opts)
-      end
-      
-      # Pass the resolver to Postgrex
-      opts = [
-        database: "postgres",
-        config_resolver: resolver
+        username: username,
+        config_resolver: &PostgrexAlloyDB.config_resolver/1
       ]
       
       # Test that config_resolver works when passed to Postgrex
