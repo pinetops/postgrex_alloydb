@@ -69,6 +69,10 @@ def start(_type, _args) do
 end
 ```
 
+## CI Status
+
+CI/CD pipeline configured with Google Cloud Build for automated testing.
+
 ## License
 
 Apache License 2.0
