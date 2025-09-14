@@ -71,7 +71,7 @@ end
 
 ## CI Status
 
-CI/CD pipeline configured with Google Cloud Build for automated testing.
+CI/CD pipeline configured with Google Cloud Build for automated testing on every push and PR.
 
 ## License
 
