@@ -1,6 +1,6 @@
 # PostgrexAlloyDB
 
-[![CI](https://console.cloud.google.com/cloud-build/builds?project=postgrex-alloydb-ci)](https://console.cloud.google.com/cloud-build/builds?project=postgrex-alloydb-ci)
+[![CI Build](https://console.cloud.google.com/cloud-build/builds?project=postgrex-alloydb-ci)](https://console.cloud.google.com/cloud-build/builds?project=postgrex-alloydb-ci)
 
 AlloyDB IAM authentication support for Postgrex connections.
 
