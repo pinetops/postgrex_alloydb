@@ -77,3 +77,4 @@ CI/CD pipeline configured with Google Cloud Build for automated testing on every
 
 Apache License 2.0
 
+# Testing fixed triggers
