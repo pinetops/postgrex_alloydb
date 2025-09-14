@@ -73,4 +73,3 @@ end
 
 Apache License 2.0
 
-# CI test - trigger enabled for all branches
