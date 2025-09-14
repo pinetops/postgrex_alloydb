@@ -71,9 +71,11 @@ end
 
 ## CI Status
 
-CI/CD pipeline configured with Google Cloud Build for automated testing.
+CI/CD pipeline configured with Google Cloud Build for automated testing on every push and PR.
 
 ## License
 
 Apache License 2.0
 
+# Testing fixed triggers
+# Test webhook trigger Sun Sep 14 18:29:43 EDT 2025
